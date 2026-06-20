@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shot Timer">
+<meta name="theme-color" content="#0a0a0a">
+<title>Shot Timer</title>
+
+<script>
+/* Inline PWA manifest as data URI for single-file install */
+const manifest = {
+  name: "Shot Timer",
+  short_name: "Shot Timer",
+  description: "Firearm drill shot timer with random delay, par time, and mic detection",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#0a0a0a",
+  theme_color: "#0a0a0a",
+  orientation: "portrait",
+  icons: [
+    { src: generateIcon(192), sizes: "192x192", type: "image/png" },
+    { src: generateIcon(512), sizes: "512x512", type: "image/png" }
+  ]
+};
+function generateIcon(size) {
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, size, size);
+  const r = size * 0.38;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, r, 0, Math.PI*2);
+  ctx.strokeStyle = '#E24B4A';
+  ctx.lineWidth = size * 0.06;
+  ctx.stroke();
+  ctx.fillStyle = '#E24B4A';
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, r * 0.22, 0, Math.PI*2);
+  ctx.fill();
+  const tickLen = size * 0.09;
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = size * 0.025;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 - Math.PI/2;
+    const inner = r * (i % 3 === 0 ? 0.78 : 0.87);
+    ctx.beginPath();
+    ctx.moveTo(size/2 + Math.cos(a)*inner, size/2 + Math.sin(a)*inner);
+    ctx.lineTo(size/2 + Math.cos(a)*(r-size*0.03), size/2 + Math.sin(a)*(r-size*0.03));
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#f0f0f0';
+  ctx.lineWidth = size * 0.03;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(size/2, size/2);
+  ctx.lineTo(size/2, size/2 - r*0.55);
+  ctx.stroke();
+  ctx.strokeStyle = '#E24B4A';
+  ctx.lineWidth = size * 0.022;
+  ctx.beginPath();
+  ctx.moveTo(size/2, size/2);
+  ctx.lineTo(size/2 + r*0.35, size/2);
+  ctx.stroke();
+  return c.toDataURL('image/png');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const icon192 = generateIcon(192);
+  const icon512 = generateIcon(512);
+  const m = {...manifest, icons:[{src:icon192,sizes:"192x192",type:"image/png"},{src:icon512,sizes:"512x512",type:"image/png"}]};
+  const blob = new Blob([JSON.stringify(m)], {type:'application/manifest+json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('link');
+  link.rel='manifest'; link.href=url;
+  document.head.appendChild(link);
+  const appleIcon = document.createElement('link');
+  appleIcon.rel='apple-touch-icon'; appleIcon.href=icon192;
+  document.head.appendChild(appleIcon);
+});
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --red: #E24B4A;
+    --red-dim: #7a1f1f;
+    --green: #1D9E75;
+    --green-bright: #5DCAA5;
+    --amber: #EF9F27;
+    --amber-dim: #7a4f00;
+    --bg: #0a0a0a;
+    --bg2: #111111;
+    --bg3: #181818;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #f0f0f0;
+    --text2: #888;
+    --text3: #555;
+    --mono: 'Courier New', monospace;
+  }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top, 44px) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 34px) env(safe-area-inset-left, 0);
+    min-height: 100dvh;
+  }
+
+  /* ─── Header ─── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 10px;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+  .header-btn {
+    background: none;
+    border: none;
+    color: var(--text2);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+  }
+
+  /* ─── Main display ─── */
+  .display-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
+    min-height: 0;
+  }
+  .state-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+    height: 16px;
+    transition: color 0.2s;
+  }
+  .state-badge.go { color: var(--green); }
+  .state-badge.par { color: var(--amber); }
+  .state-badge.done { color: var(--green); }
+  .state-badge.standby { color: var(--text3); animation: pulse 1.1s ease-in-out infinite; }
+
+  .time-display {
+    font-family: var(--mono);
+    font-size: 72px;
+    font-weight: 400;
+    letter-spacing: -2px;
+    line-height: 1;
+    color: var(--text3);
+    transition: color 0.15s;
+    text-align: center;
+    min-width: 240px;
+  }
+  .time-display.standby { color: #333; }
+  .time-display.go { color: var(--text); }
+  .time-display.par { color: var(--amber); }
+  .time-display.done { color: var(--green-bright); }
+
+  .sub-stats {
+    display: flex;
+    gap: 32px;
+    margin-top: 20px;
+  }
+  .stat { text-align: center; }
+  .stat-val {
+    font-family: var(--mono);
+    font-size: 16px;
+    color: var(--text2);
+    font-weight: 400;
+  }
+  .stat-lbl {
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  /* ─── Mic bar ─── */
+  .mic-strip {
+    width: 100%;
+    padding: 0 20px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+  }
+  .mic-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 14px;
+  }
+  .mic-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text3);
+    flex-shrink: 0;
+    transition: background 0.1s;
+  }
+  .mic-dot.armed { background: var(--green); }
+  .mic-dot.active { background: var(--red); animation: flash 0.15s ease-in-out; }
+  .mic-lbl { font-size: 11px; color: var(--text3); flex: 1; }
+  .level-track {
+    width: 80px; height: 3px;
+    background: var(--border2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .level-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--red);
+    border-radius: 2px;
+    transition: width 0.04s;
+  }
+
+  /* ─── Start button ─── */
+  .btn-area {
+    padding: 0 20px 12px;
+    flex-shrink: 0;
+  }
+  .start-btn {
+    width: 100%;
+    height: 64px;
+    border: none;
+    border-radius: 16px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    -webkit-user-select: none;
+  }
+  .start-btn:active { transform: scale(0.97); opacity: 0.85; }
+  .start-btn.idle { background: var(--red); color: #fff; }
+  .start-btn.standby { background: var(--bg3); color: var(--text3); cursor: default; }
+  .start-btn.running { background: var(--bg3); color: var(--text3); cursor: default; }
+  .start-btn.done { background: var(--bg3); color: var(--text2); border: 0.5px solid var(--border2); }
+  .start-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.7;
+  }
+
+  /* ─── Settings panel ─── */
+  .settings-panel {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    padding: env(safe-area-inset-top, 44px) 0 env(safe-area-inset-bottom, 34px);
+  }
+  .settings-panel.open { display: flex; }
+  .settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 18px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .settings-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .close-btn {
+    background: var(--bg3);
+    border: none;
+    color: var(--text2);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 14px;
+    border-radius: 20px;
+  }
+  .settings-body { flex: 1; overflow-y: auto; padding: 20px; }
+  .settings-section { margin-bottom: 28px; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+  }
+  .settings-card {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    gap: 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row-lbl { font-size: 15px; color: var(--text); min-width: 90px; }
+  .setting-row-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .setting-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    background: var(--border2);
+    border-radius: 2px;
+    outline: none;
+  }
+  .setting-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--text);
+    cursor: pointer;
+    border: none;
+  }
+  .setting-val-lbl {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--text2);
+    min-width: 38px;
+    text-align: right;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    gap: 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-lbl-wrap { flex: 1; }
+  .toggle-lbl { font-size: 15px; color: var(--text); }
+  .toggle-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .ios-toggle {
+    position: relative;
+    width: 51px; height: 31px;
+    flex-shrink: 0;
+  }
+  .ios-toggle input { opacity: 0; width: 0; height: 0; }
+  .ios-slider {
+    position: absolute;
+    inset: 0;
+    background: #3a3a3a;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .ios-slider:before {
+    content: '';
+    position: absolute;
+    width: 27px; height: 27px;
+    left: 2px; top: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .ios-toggle input:checked + .ios-slider { background: var(--green); }
+  .ios-toggle input:checked + .ios-slider:before { transform: translateX(20px); }
+
+  /* ─── Shot log ─── */
+  .log-strip {
+    padding: 0 20px 10px;
+    flex-shrink: 0;
+  }
+  .log-inner {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .log-inner::-webkit-scrollbar { display: none; }
+  .log-chip {
+    flex-shrink: 0;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    text-align: center;
+  }
+  .log-chip-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--green-bright);
+    font-weight: 400;
+  }
+  .log-chip-idx {
+    font-size: 9px;
+    color: var(--text3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+  .log-empty {
+    font-size: 11px;
+    color: var(--text3);
+    padding: 6px 0;
+    letter-spacing: 0.06em;
+  }
+
+  /* ─── Install banner ─── */
+  .install-banner {
+    margin: 0 20px 10px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border2);
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .install-icon { font-size: 18px; flex-shrink: 0; }
+  .install-text { font-size: 12px; color: var(--text2); line-height: 1.4; flex: 1; }
+  .install-text strong { color: var(--text); font-weight: 600; }
+  .install-dismiss {
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ─── Animations ─── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  @keyframes flash { 0%{opacity:0.3} 100%{opacity:1} }
+  @keyframes pop {
+    0%{transform:scale(0.94);opacity:0}
+    60%{transform:scale(1.02)}
+    100%{transform:scale(1);opacity:1}
+  }
+  .pop { animation: pop 0.25s ease-out forwards; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Install banner (hidden in standalone mode) -->
+<div class="install-banner" id="install-banner">
+  <span class="install-icon">⬆</span>
+  <span class="install-text">Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install as an app</span>
+  <button class="install-dismiss" onclick="document.getElementById('install-banner').style.display='none'" aria-label="Dismiss">×</button>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <span class="header-title">Shot Timer</span>
+  <button class="header-btn" onclick="openSettings()" aria-label="Settings">⚙</button>
+</div>
+
+<!-- Main display -->
+<div class="display-area">
+  <div class="state-badge" id="state-badge">ready</div>
+  <div class="time-display" id="time-display">0.00</div>
+  <div class="sub-stats">
+    <div class="stat">
+      <div class="stat-val" id="last-time">—</div>
+      <div class="stat-lbl">last</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="best-time">—</div>
+      <div class="stat-lbl">best</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="par-left">—</div>
+      <div class="stat-lbl">par left</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="shot-count-display">—</div>
+      <div class="stat-lbl">shots</div>
+    </div>
+  </div>
+</div>
+
+<!-- Shot log -->
+<div class="log-strip">
+  <div class="log-inner" id="shot-log">
+    <span class="log-empty">no shots yet</span>
+  </div>
+</div>
+
+<!-- Mic strip -->
+<div class="mic-strip">
+  <div class="mic-inner">
+    <div class="mic-dot" id="mic-dot"></div>
+    <span class="mic-lbl" id="mic-lbl">mic inactive</span>
+    <div class="level-track"><div class="level-fill" id="level-fill"></div></div>
+  </div>
+</div>
+
+<!-- Start button -->
+<div class="btn-area">
+  <button class="start-btn idle" id="start-btn" onclick="handleStart()">
+    <div class="start-dot"></div>
+    <span id="btn-label">Start</span>
+  </button>
+</div>
+
+<!-- Settings panel -->
+<div class="settings-panel" id="settings-panel">
+  <div class="settings-header">
+    <span class="settings-title">Settings</span>
+    <button class="close-btn" onclick="closeSettings()">Done</button>
+  </div>
+  <div class="settings-body">
+
+    <div class="settings-section">
+      <div class="section-label">Delay window</div>
+      <div class="settings-card">
+        <div class="setting-row">
+          <div><div class="setting-row-lbl">Min delay</div><div class="setting-row-sub">Earliest beep fires</div></div>
+          <input type="range" id="s-min" min="0.5" max="5" step="0.1" value="1.0" oninput="syncSlider('min')">
+          <span class="setting-val-lbl" id="s-min-val">1.0s</span>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-row-lbl">Max delay</div><div class="setting-row-sub">Latest beep fires</div></div>
+          <input type="range" id="s-max" min="0.5" max="8" step="0.1" value="4.0" oninput="syncSlider('max')">
+          <span class="setting-val-lbl" id="s-max-val">4.0s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-label">Par time</div>
+      <div class="settings-card">
+        <div class="toggle-row">
+          <div class="toggle-lbl-wrap">
+            <div class="toggle-lbl">Par time</div>
+            <div class="toggle-sub">Second beep at a fixed interval</div>
+          </div>
+          <label class="ios-toggle">
+            <input type="checkbox" id="s-par-on" checked onchange="togglePar()">
+            <span class="ios-slider"></span>
+          </label>
+        </div>
+        <div class="setting-row" id="par-row">
+          <div><div class="setting-row-lbl">Par duration</div><div class="setting-row-sub">Target your draw time</div></div>
+          <input type="range" id="s-par" min="0.5" max="10" step="0.1" value="2.0" oninput="document.getElementById('s-par-val').textContent=parseFloat(this.value).toFixed(1)+'s'">
+          <span class="setting-val-lbl" id="s-par-val">2.0s</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-label">Drill</div>
+      <div class="settings-card">
+        <div class="setting-row">
+          <div><div class="setting-row-lbl">Shot count</div><div class="setting-row-sub">Shots required to stop timer</div></div>
+          <input type="range" id="s-shotcount" min="1" max="12" step="1" value="1" oninput="updateShotCount()">
+          <span class="setting-val-lbl" id="s-shotcount-val">1</span>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-row-lbl">Split debounce</div><div class="setting-row-sub">Min ms between shots</div></div>
+          <input type="range" id="s-debounce" min="50" max="500" step="10" value="120" oninput="document.getElementById('s-debounce-val').textContent=this.value+'ms'">
+          <span class="setting-val-lbl" id="s-debounce-val">120ms</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-label">Microphone</div>
+      <div class="settings-card">
+        <div class="setting-row">
+          <div><div class="setting-row-lbl">Sensitivity</div><div class="setting-row-sub">Higher = less sensitive</div></div>
+          <input type="range" id="s-sens" min="1" max="100" step="1" value="30" oninput="document.getElementById('s-sens-val').textContent=this.value">
+          <span class="setting-val-lbl" id="s-sens-val">30</span>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-lbl-wrap">
+            <div class="toggle-lbl">Auto-stop on shot</div>
+            <div class="toggle-sub">Mic detects CO₂ blowback</div>
+          </div>
+          <label class="ios-toggle">
+            <input type="checkbox" id="s-autostop" checked>
+            <span class="ios-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-label">Session</div>
+      <div class="settings-card">
+        <div class="toggle-row" style="cursor:pointer" onclick="clearLog()">
+          <div class="toggle-lbl-wrap">
+            <div class="toggle-lbl" style="color:#E24B4A">Clear shot log</div>
+            <div class="toggle-sub">Resets all recorded times</div>
+          </div>
+          <span style="color:#555;font-size:18px;">›</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ─── State ─── */
+let timerState = 'idle';
+let audioCtx = null;
+let micStream = null;
+let analyserNode = null;
+let delayTimer = null;
+let parTimer = null;
+let elapsedRAF = null;
+let shotStart = null;
+let listenActive = false;
+let micLive = false;
+let shotLog = [];
+let bestTime = null;
+let animRAF = null;
+let shotsDetected = 0;
+let lastShotTime = 0;
+
+/* ─── Standalone detection ─── */
+if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+  const b = document.getElementById('install-banner');
+  if (b) b.style.display = 'none';
+}
+
+/* ─── Audio ─── */
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playBeep(freq, dur, vol, type = 'sine') {
+  const ctx = getCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 0.01);
+  gain.gain.setValueAtTime(vol, ctx.currentTime + dur * 0.7);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + dur + 0.05);
+}
+
+function playGoBeep() {
+  playBeep(2400, 0.22, 0.85, 'sine');
+}
+
+function playParBeep() {
+  playBeep(1800, 0.18, 0.6, 'sine');
+}
+
+function playConfirmBeep() {
+  playBeep(1200, 0.06, 0.4, 'sine');
+  setTimeout(() => playBeep(1400, 0.06, 0.35, 'sine'), 75);
+}
+
+/* ─── Mic ─── */
+async function startMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+    const ctx = getCtx();
+    const src = ctx.createMediaStreamSource(micStream);
+    analyserNode = ctx.createAnalyser();
+    analyserNode.fftSize = 256;
+    analyserNode.smoothingTimeConstant = 0;
+    src.connect(analyserNode);
+    micLive = true;
+    setMicUI('armed', 'mic active');
+    runMicLoop();
+  } catch (e) {
+    setMicUI('', 'mic access denied — stop manually');
+  }
+}
+
+function stopMic() {
+  micLive = false;
+  listenActive = false;
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  analyserNode = null;
+  setMicUI('', 'mic inactive');
+  document.getElementById('level-fill').style.width = '0%';
+}
+
+function setMicUI(dotClass, label) {
+  const d = document.getElementById('mic-dot');
+  d.className = 'mic-dot' + (dotClass ? ' ' + dotClass : '');
+  document.getElementById('mic-lbl').textContent = label;
+}
+
+function runMicLoop() {
+  if (!analyserNode || !micLive) return;
+  const data = new Uint8Array(analyserNode.frequencyBinCount);
+  function tick() {
+    if (!analyserNode || !micLive) return;
+    analyserNode.getByteTimeDomainData(data);
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = Math.abs(data[i] - 128);
+      if (v > peak) peak = v;
+    }
+    const pct = Math.min(100, (peak / 128) * 200);
+    document.getElementById('level-fill').style.width = pct.toFixed(0) + '%';
+    const threshold = parseInt(document.getElementById('s-sens').value);
+    const scaled = (peak / 128) * 100;
+    if (listenActive && document.getElementById('s-autostop').checked && scaled > threshold) {
+      const now = Date.now();
+      const debounce = parseInt(document.getElementById('s-debounce').value);
+      if (now - lastShotTime > debounce) {
+        lastShotTime = now;
+        const dot = document.getElementById('mic-dot');
+        dot.classList.add('active');
+        setTimeout(() => { if (micLive) dot.classList.remove('active'); }, 150);
+        shotDetected();
+      }
+    }
+    animRAF = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+/* ─── Timer state machine ─── */
+function setState(s) {
+  timerState = s;
+  const badge = document.getElementById('state-badge');
+  const display = document.getElementById('time-display');
+  const btn = document.getElementById('start-btn');
+  const label = document.getElementById('btn-label');
+
+  badge.className = 'state-badge ' + s;
+  display.className = 'time-display ' + s;
+
+  const labels = { idle:'ready', standby:'standby…', go:'go!', par:'par', done:'done' };
+  badge.textContent = labels[s] || s;
+
+  if (s === 'idle') {
+    btn.className = 'start-btn idle';
+    label.textContent = 'Start';
+  } else if (s === 'standby') {
+    btn.className = 'start-btn standby';
+    label.textContent = 'Armed…';
+  } else if (s === 'go' || s === 'par') {
+    btn.className = 'start-btn running';
+    label.textContent = 'Running';
+  } else if (s === 'done') {
+    btn.className = 'start-btn done';
+    label.textContent = 'Reset';
+  }
+}
+
+function handleStart() {
+  getCtx(); // unlock audio on first user gesture
+  if (timerState === 'idle') startDrill();
+  else if (timerState === 'done') resetDrill();
+}
+
+function startDrill() {
+  const minD = parseFloat(document.getElementById('s-min').value);
+  const maxD = parseFloat(document.getElementById('s-max').value);
+  const delay = minD + Math.random() * (maxD - minD);
+
+  setState('standby');
+  shotsDetected = 0;
+  lastShotTime = 0;
+  document.getElementById('time-display').textContent = '…';
+  document.getElementById('par-left').textContent = '—';
+  document.getElementById('shot-count-display').textContent = '—';
+
+  if (!micLive) startMic();
+
+  delayTimer = setTimeout(fireGoBeep, delay * 1000);
+}
+
+function fireGoBeep() {
+  playGoBeep();
+  shotStart = Date.now();
+  setState('go');
+  listenActive = true;
+  const reqShots = parseInt(document.getElementById('s-shotcount').value);
+  document.getElementById('shot-count-display').textContent = '0/' + reqShots;
+  setMicUI('active', reqShots > 1 ? 'listening — 0/' + reqShots + ' shots' : 'listening for shot…');
+
+  const parOn = document.getElementById('s-par-on').checked;
+  const parDur = parseFloat(document.getElementById('s-par').value);
+
+  // Elapsed ticker
+  function tick() {
+    if (!shotStart) return;
+    const elapsed = (Date.now() - shotStart) / 1000;
+    document.getElementById('time-display').textContent = elapsed.toFixed(2);
+    if (parOn) {
+      const left = Math.max(0, parDur - elapsed);
+      document.getElementById('par-left').textContent = left.toFixed(1) + 's';
+    }
+    elapsedRAF = requestAnimationFrame(tick);
+  }
+  elapsedRAF = requestAnimationFrame(tick);
+
+  if (parOn) {
+    parTimer = setTimeout(() => {
+      if (timerState !== 'go') return;
+      setState('par');
+      playParBeep();
+      document.getElementById('par-left').textContent = '0.0s';
+      setMicUI('armed', 'past par — listening…');
+    }, parDur * 1000);
+  }
+}
+
+function shotDetected() {
+  if (timerState !== 'go' && timerState !== 'par') return;
+  shotsDetected++;
+  const required = parseInt(document.getElementById('s-shotcount').value);
+  document.getElementById('shot-count-display').textContent = shotsDetected + '/' + required;
+  setMicUI('active', 'shot ' + shotsDetected + ' of ' + required + ' detected');
+  if (shotsDetected >= required) {
+    listenActive = false;
+    finishDrill();
+  }
+}
+
+function finishDrill() {
+  cancelAnimationFrame(elapsedRAF);
+  clearTimeout(delayTimer);
+  clearTimeout(parTimer);
+
+  const elapsed = ((Date.now() - shotStart) / 1000).toFixed(2);
+  shotStart = null;
+
+  document.getElementById('time-display').textContent = elapsed;
+  document.getElementById('time-display').classList.add('pop');
+  document.getElementById('last-time').textContent = elapsed + 's';
+  document.getElementById('par-left').textContent = '—';
+
+  if (!bestTime || parseFloat(elapsed) < parseFloat(bestTime)) {
+    bestTime = elapsed;
+    document.getElementById('best-time').textContent = elapsed + 's';
+  }
+
+  addToLog(elapsed);
+  setState('done');
+  playConfirmBeep();
+  setMicUI('armed', 'mic active');
+}
+
+function resetDrill() {
+  cancelAnimationFrame(elapsedRAF);
+  clearTimeout(delayTimer);
+  clearTimeout(parTimer);
+  listenActive = false;
+  shotStart = null;
+  shotsDetected = 0;
+  lastShotTime = 0;
+  document.getElementById('time-display').textContent = '0.00';
+  document.getElementById('time-display').className = 'time-display';
+  document.getElementById('par-left').textContent = '—';
+  document.getElementById('shot-count-display').textContent = '—';
+  setState('idle');
+}
+
+/* ─── Shot log ─── */
+function addToLog(t) {
+  shotLog.unshift(t);
+  if (shotLog.length > 20) shotLog.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('shot-log');
+  if (shotLog.length === 0) {
+    el.innerHTML = '<span class="log-empty">no shots yet</span>';
+    return;
+  }
+  el.innerHTML = shotLog.map((t, i) => `
+    <div class="log-chip">
+      <div class="log-chip-num">${t}s</div>
+      <div class="log-chip-idx">#${shotLog.length - i}</div>
+    </div>
+  `).join('');
+}
+
+function clearLog() {
+  shotLog = [];
+  bestTime = null;
+  document.getElementById('best-time').textContent = '—';
+  document.getElementById('last-time').textContent = '—';
+  renderLog();
+}
+
+/* ─── Settings ─── */
+function openSettings() {
+  document.getElementById('settings-panel').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-panel').classList.remove('open');
+}
+
+function syncSlider(which) {
+  let minV = parseFloat(document.getElementById('s-min').value);
+  let maxV = parseFloat(document.getElementById('s-max').value);
+  if (which === 'min' && minV >= maxV) { maxV = Math.min(8, minV + 0.5); document.getElementById('s-max').value = maxV; }
+  if (which === 'max' && maxV <= minV) { minV = Math.max(0.5, maxV - 0.5); document.getElementById('s-min').value = minV; }
+  document.getElementById('s-min-val').textContent = parseFloat(document.getElementById('s-min').value).toFixed(1) + 's';
+  document.getElementById('s-max-val').textContent = parseFloat(document.getElementById('s-max').value).toFixed(1) + 's';
+}
+
+function updateShotCount() {
+  const val = parseInt(document.getElementById('s-shotcount').value);
+  document.getElementById('s-shotcount-val').textContent = val === 1 ? '1 (single)' : val;
+}
+
+function togglePar() {
+  const on = document.getElementById('s-par-on').checked;
+  const row = document.getElementById('par-row');
+  row.style.opacity = on ? '1' : '0.4';
+  row.style.pointerEvents = on ? 'auto' : 'none';
+  if (!on) document.getElementById('par-left').textContent = '—';
+}
+
+/* ─── Prevent scroll/bounce on iOS ─── */
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+</script>
+</body>
+</html>
