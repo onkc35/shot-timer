@@ -341,19 +341,6 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top,44px) en
       </div>
     </div>
 
-    <div class="settings-section">
-      <div class="section-label">Session</div>
-      <div class="settings-card">
-        <div class="toggle-row" style="cursor:pointer" onclick="clearHistory();closeSettings()">
-          <div class="toggle-lbl-wrap">
-            <div class="toggle-lbl" style="color:#E24B4A">Clear all history</div>
-            <div class="toggle-sub">Resets all recorded times</div>
-          </div>
-          <span style="color:#555;font-size:18px;">›</span>
-        </div>
-      </div>
-    </div>
-
   </div>
 </div>
 
@@ -591,25 +578,25 @@ function stepShots(delta) {
 const DRILLS = {
   'custom': { label: 'Custom', shots: null, desc: null },
   '2':  { label: 'Double Tap', shots: 2,
-    desc: 'Two controlled shots to center mass as fast as possible while maintaining accuracy. Foundation of all defensive shooting.',
+    desc: 'Two fast shots to center mass. The foundation of defensive shooting.',
     tags: ['2 shots', '7 yds', 'Fundamentals'] },
   '3':  { label: 'Mozambique', shots: 3,
-    desc: 'Two shots to the body, one to the head. Originated in Rhodesia, popularized by Jeff Cooper. Tests transition from body to precision headshot.',
+    desc: 'Two to the body, one to the head. Trains the transition from speed to precision.',
     tags: ['3 shots', '7 yds', 'Failure drill'] },
   '5':  { label: 'IDPA 5×5', shots: 5,
-    desc: 'One string of the IDPA classifier. Draw and fire 5 shots to the -0 zone in 5 seconds. Four strings total in the full classifier.',
+    desc: 'Five shots to the scoring zone in under 5 seconds. One string of the IDPA classifier.',
     tags: ['5 shots', '10 yds', 'IDPA'] },
   '6':  { label: 'Bill Drill', shots: 6,
-    desc: 'Draw and fire 6 rounds as fast as possible into the A-zone. Developed by Bill Wilson. Tests trigger speed and recoil management. Sub-2.0s is elite.',
+    desc: 'Six rounds, one target, as fast as you can control. Pure trigger speed and recoil management.',
     tags: ['6 shots', '7 yds', 'USPSA'] },
   '6b': { label: 'The William', shots: 6,
-    desc: 'Variant of the Bill Drill: 5 shots to the body, then one precise shot to the head. Forces you to brake hard after a fast string.',
+    desc: 'Five to the body, then brake hard for one to the head. Speed into precision.',
     tags: ['6 shots', '7 yds', 'Transition'] },
   '6c': { label: 'FAST Drill', shots: 6,
-    desc: 'Todd Louis Green\'s Fundamentals, Accuracy & Speed Test. 2 shots to a 3×5 index card, emergency reload, 4 shots to an 8-inch circle. Sub-5.0s is expert.',
+    desc: 'Two shots to a 3×5 card, emergency reload, four to an 8-inch circle. Tests draw, accuracy, and reload under pressure.',
     tags: ['6 shots', '7 yds', 'Reload'] },
   '12': { label: 'El Presidente', shots: 12,
-    desc: 'Jeff Cooper classic. Back to 3 targets, turn on signal, 2 shots each, reload, 2 shots each again. Tests draw, accuracy, transitions, and reloads.',
+    desc: 'Back to three targets, turn and engage. Two shots each, reload, two more each. The classic test of transitions and reloads.',
     tags: ['12 shots', '10 yds', '3 targets'] },
 };
 
