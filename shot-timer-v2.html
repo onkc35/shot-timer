@@ -262,17 +262,17 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top,44px) en
     <div class="settings-section">
       <div class="section-label">Par time</div>
       <div class="settings-card">
-        <div class="toggle-row">
-          <div class="toggle-lbl-wrap">
-            <div class="toggle-lbl">Par time</div>
-            <div class="toggle-sub">Second beep at a fixed interval</div>
-          </div>
-          <label class="ios-toggle"><input type="checkbox" id="s-par-on" checked onchange="togglePar()"><span class="ios-slider"></span></label>
-        </div>
-        <div class="setting-row" id="par-row">
-          <div><div class="setting-row-lbl">Par duration</div><div class="setting-row-sub">Target your draw time</div></div>
+        <div class="setting-row">
+          <div><div class="setting-row-lbl">Par duration</div><div class="setting-row-sub">Always tracked — beat it or miss it</div></div>
           <input type="range" id="s-par" min="0.5" max="10" step="0.1" value="2.0" oninput="document.getElementById('s-par-val').textContent=parseFloat(this.value).toFixed(1)+'s'">
           <span class="setting-val-lbl" id="s-par-val">2.0s</span>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-lbl-wrap">
+            <div class="toggle-lbl">Par beep</div>
+            <div class="toggle-sub">Audible second beep at par time</div>
+          </div>
+          <label class="ios-toggle"><input type="checkbox" id="s-par-on" checked><span class="ios-slider"></span></label>
         </div>
       </div>
     </div>
@@ -326,15 +326,28 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top,44px) en
     <div class="settings-section">
       <div class="section-label">Microphone</div>
       <div class="settings-card">
+        <div class="setting-row" style="gap:10px">
+          <div style="flex:1">
+            <div class="setting-row-lbl">Environment</div>
+            <div class="setting-row-sub">Sets sensitivity preset</div>
+          </div>
+          <div class="drill-select-wrap" style="flex:1.4">
+            <select class="drill-select" id="s-env" onchange="envSelected()">
+              <option value="live">Live fire</option>
+              <option value="dry">Dry fire</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
         <div class="setting-row">
           <div><div class="setting-row-lbl">Sensitivity</div><div class="setting-row-sub">Higher = more sensitive</div></div>
-          <input type="range" id="s-sens" min="1" max="100" step="1" value="70" oninput="document.getElementById('s-sens-val').textContent=this.value">
+          <input type="range" id="s-sens" min="1" max="100" step="1" value="70" oninput="document.getElementById('s-sens-val').textContent=this.value; document.getElementById('s-env').value='custom'">
           <span class="setting-val-lbl" id="s-sens-val">70</span>
         </div>
         <div class="toggle-row">
           <div class="toggle-lbl-wrap">
             <div class="toggle-lbl">Auto-stop on shot</div>
-            <div class="toggle-sub">Mic detects CO₂ blowback</div>
+            <div class="toggle-sub">Mic detects sound</div>
           </div>
           <label class="ios-toggle"><input type="checkbox" id="s-autostop" checked><span class="ios-slider"></span></label>
         </div>
@@ -491,28 +504,23 @@ function fireGoBeep() {
   const req = getShotCount();
   document.getElementById('shot-count-display').textContent = '0/'+req;
   setMicUI('active', req > 1 ? 'listening — 0/'+req+' shots' : 'listening for shot…');
-  const parOn = document.getElementById('s-par-on').checked;
+  const parBeep = document.getElementById('s-par-on').checked;
   const parDur = parseFloat(document.getElementById('s-par').value);
   function tick() {
     if (!shotStart) return;
     const elapsed = (Date.now()-shotStart)/1000;
     document.getElementById('time-display').textContent = elapsed.toFixed(2);
-    if (parOn) {
-      const left = Math.max(0, parDur-elapsed);
-      document.getElementById('par-left').textContent = left.toFixed(1)+'s';
-    }
+    const left = Math.max(0, parDur-elapsed);
+    document.getElementById('par-left').textContent = left.toFixed(1)+'s';
     elapsedRAF = requestAnimationFrame(tick);
   }
   elapsedRAF = requestAnimationFrame(tick);
-  if (parOn) {
-    parTimer = setTimeout(() => {
-      if (timerState!=='go') return;
-      setState('par');
-      playParBeep();
-      document.getElementById('par-left').textContent = '0.0s';
-      setMicUI('armed', 'past par — listening…');
-    }, parDur*1000);
-  }
+  parTimer = setTimeout(() => {
+    if (timerState!=='go') return;
+    setState('par');
+    if (parBeep) playParBeep();
+    setMicUI('armed', 'past par — listening…');
+  }, parDur*1000);
 }
 
 function registerShot() {
@@ -535,10 +543,19 @@ function finishDrill() {
   document.getElementById('time-display').textContent = elapsed;
   document.getElementById('time-display').classList.add('pop');
   document.getElementById('last-time').textContent = elapsed+'s';
-  document.getElementById('par-left').textContent = '—';
   if (!bestTime || parseFloat(elapsed) < parseFloat(bestTime)) {
     bestTime = elapsed;
     document.getElementById('best-time').textContent = elapsed+'s';
+  }
+  const parDur = parseFloat(document.getElementById('s-par').value);
+  const overUnder = parDur - parseFloat(elapsed);
+  const parEl = document.getElementById('par-left');
+  if (overUnder >= 0) {
+    parEl.textContent = '−'+overUnder.toFixed(2)+'s';
+    parEl.style.color = 'var(--green-bright)';
+  } else {
+    parEl.textContent = '+'+Math.abs(overUnder).toFixed(2)+'s';
+    parEl.style.color = 'var(--red)';
   }
   const drillLabel = currentDrillLabel;
   const shots = getShotCount();
@@ -556,7 +573,9 @@ function resetDrill() {
   listenActive = false; shotStart = null; shotsDetected = 0; lastShotTime = 0;
   document.getElementById('time-display').textContent = '0.00';
   document.getElementById('time-display').className = 'time-display';
-  document.getElementById('par-left').textContent = '—';
+  const parEl = document.getElementById('par-left');
+  parEl.textContent = '—';
+  parEl.style.color = '';
   document.getElementById('shot-count-display').textContent = '—';
   setState('idle');
 }
@@ -666,12 +685,13 @@ function syncSlider(which) {
   document.getElementById('s-min-val').textContent = parseFloat(document.getElementById('s-min').value).toFixed(1)+'s';
   document.getElementById('s-max-val').textContent = parseFloat(document.getElementById('s-max').value).toFixed(1)+'s';
 }
-function togglePar() {
-  const on = document.getElementById('s-par-on').checked;
-  const row = document.getElementById('par-row');
-  row.style.opacity = on?'1':'0.4';
-  row.style.pointerEvents = on?'auto':'none';
-  if (!on) document.getElementById('par-left').textContent = '—';
+function envSelected() {
+  const presets = { live: 70, dry: 80 };
+  const val = document.getElementById('s-env').value;
+  if (presets[val] !== undefined) {
+    document.getElementById('s-sens').value = presets[val];
+    document.getElementById('s-sens-val').textContent = presets[val];
+  }
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────
@@ -691,7 +711,6 @@ document.addEventListener('touchmove', e => {
   e.preventDefault();
 }, { passive: false });
 
-togglePar();
 renderHistory();
 </script>
 </body>
