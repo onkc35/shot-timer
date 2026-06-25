@@ -72,7 +72,7 @@ body{display:flex;flex-direction:column;padding:env(safe-area-inset-top,44px) en
 .btn-area{padding:0 20px 12px;flex-shrink:0}
 .start-btn{width:100%;height:64px;border:none;border-radius:16px;font-size:18px;font-weight:600;letter-spacing:0.04em;cursor:pointer;transition:opacity 0.15s,transform 0.1s;display:flex;align-items:center;justify-content:center;gap:10px;-webkit-user-select:none}
 .start-btn:active{transform:scale(0.97);opacity:0.85}
-.start-btn.idle{background:var(--red);color:#fff}.start-btn.standby{background:var(--bg3);color:var(--text3);cursor:default}.start-btn.running{background:var(--bg3);color:var(--text3);cursor:default}.start-btn.done{background:var(--bg3);color:var(--text2);border:0.5px solid var(--border2)}
+.start-btn.idle{background:var(--red);color:#fff}.start-btn.standby{background:var(--bg3);color:var(--text2);border:0.5px solid var(--border2)}.start-btn.running{background:var(--bg3);color:var(--text2);border:0.5px solid var(--border2)}.start-btn.done{background:var(--bg3);color:var(--text2);border:0.5px solid var(--border2)}
 .start-dot{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:0.7}
 
 /* Tab bar */
@@ -471,14 +471,15 @@ function setState(s) {
   const labels = {idle:'ready', standby:'standby…', go:'go!', par:'par', done:'done'};
   badge.textContent = labels[s] || s;
   if (s==='idle') { btn.className='start-btn idle'; lbl.textContent='Start'; }
-  else if (s==='standby') { btn.className='start-btn standby'; lbl.textContent='Armed…'; }
-  else if (s==='go'||s==='par') { btn.className='start-btn running'; lbl.textContent='Running'; }
+  else if (s==='standby') { btn.className='start-btn standby'; lbl.textContent='Stop'; }
+  else if (s==='go'||s==='par') { btn.className='start-btn running'; lbl.textContent='Stop'; }
   else if (s==='done') { btn.className='start-btn done'; lbl.textContent='Reset'; }
 }
 
 function handleStart() {
   getCtx();
   if (timerState==='idle') startDrill();
+  else if (timerState==='standby'||timerState==='go'||timerState==='par') resetDrill();
   else if (timerState==='done') resetDrill();
 }
 
